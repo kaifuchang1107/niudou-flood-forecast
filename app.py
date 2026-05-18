@@ -78,7 +78,8 @@ def fetch_all():
             rain_detail[STATION_NAME[sid]] = p
     result['P_obs'] = P_obs
     result['rain_detail'] = rain_detail
-    result['obs_time'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+    # 用水利署資料時間（已含+08:00 台灣時間）作為更新時間
+    result['obs_time'] = result.get('wl_time', '')
 
     # 3. QPF
     url3 = (f'https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-B0046-001'
@@ -256,7 +257,7 @@ with col_btn:
     if st.button('🔄 立即更新', use_container_width=True):
         st.cache_data.clear()
 with col_time:
-    st.caption(f'自動更新間隔：10分鐘 | 上次更新：{st.session_state.last_fetch or "—"}')
+    st.caption(f'自動更新間隔：10分鐘 | 資料時間（台灣）：{st.session_state.last_fetch or "—"}')
 
 # 抓資料
 with st.spinner('抓取即時資料中...'):
@@ -266,7 +267,11 @@ with st.spinner('抓取即時資料中...'):
         P_obs  = data['P_obs']
         P_qpf  = data['P_qpf']
         wl_time = data['wl_time']
-        st.session_state.last_fetch = data['obs_time']
+        try:
+            wl_dt = datetime.fromisoformat(data['wl_time'].replace('+08:00',''))
+            st.session_state.last_fetch = wl_dt.strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            st.session_state.last_fetch = data.get('wl_time','—')
 
         # 更新歷史水位
         now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))

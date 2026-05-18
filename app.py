@@ -102,13 +102,16 @@ def fetch_all():
     return result
 
 # ── 預測函式 ──────────────────────────────────────────────────────
-def run_forecast(L_now, P_obs, P_qpf):
-    L_start = L_now; y_cur = 0.0; y_prev = 0.0
+def run_forecast(L_now, P_obs, P_qpf, L_start=None):
+    if L_start is None:
+        L_start = L_now   # 無事件：滾動基準
+    y_cur  = L_now - L_start
+    y_prev = L_now - L_start   # L_prev 仍用 L_now 近似
 
     # 遞推（+1h, +2h）
     P_next = P_qpf if P_qpf is not None else P_obs
     rec = []
-    buf = [y_prev, y_cur]
+    buf = [y_cur, y_cur]   # 用 y_cur 初始化兩步（L_prev ≈ L_now）
     for h in range(1, 3):
         P_use = P_obs if h == 1 else P_next
         nd = PHI1*buf[-1] + PHI2*buf[-2] + B1*P_use
@@ -232,9 +235,15 @@ st.caption('模型：水位偏差 ARX(2,1,0) | 資料：水利署 + 氣象署 CW
 
 # 初始化 session state
 if 'history' not in st.session_state:
-    st.session_state.history = []   # [(datetime, water_level)]
+    st.session_state.history = []
 if 'last_fetch' not in st.session_state:
     st.session_state.last_fetch = None
+if 'L_start_event' not in st.session_state:
+    st.session_state.L_start_event = None   # 事件起始水位（鎖定後不變）
+if 'event_active' not in st.session_state:
+    st.session_state.event_active = False
+
+EVENT_P_THRESHOLD = 5.0   # mm/h，超過此值視為洪水事件開始
 
 # 手動刷新按鈕
 col_btn, col_time = st.columns([1,4])
@@ -258,9 +267,23 @@ with st.spinner('抓取即時資料中...'):
         now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))
         if not st.session_state.history or st.session_state.history[-1][0] != now_dt:
             st.session_state.history.append((now_dt, L_now))
-            st.session_state.history = st.session_state.history[-48:]  # 保留最近48筆
+            st.session_state.history = st.session_state.history[-48:]
 
-        rec, drc = run_forecast(L_now, P_obs, P_qpf)
+        # ── L_start 事件偵測（鎖定起始水位）────────────────────────
+        if P_obs >= EVENT_P_THRESHOLD:
+            if not st.session_state.event_active:
+                # 事件開始：鎖定當前水位為 L_start
+                st.session_state.L_start_event = L_now
+                st.session_state.event_active  = True
+        else:
+            if st.session_state.event_active:
+                # 降雨停止：重置（下次有雨再重新鎖定）
+                st.session_state.event_active  = False
+                st.session_state.L_start_event = None
+
+        L_start_use = st.session_state.L_start_event if st.session_state.event_active else L_now
+
+        rec, drc = run_forecast(L_now, P_obs, P_qpf, L_start=L_start_use)
         fetch_ok = True
     except Exception as e:
         st.error(f'資料抓取失敗：{e}')

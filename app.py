@@ -23,7 +23,7 @@ st.set_page_config(
 )
 
 # ── 常數 ─────────────────────────────────────────────────────────
-CWA_KEY    = st.secrets.get('CWA_KEY', 'CWA-DE00E89E-7FDA-4D5D-9BF6-3CA7BD27BFA6')
+CWA_KEY    = st.secrets["CWA_KEY"]
 WL_STATION = '2560H024'
 WARNING    = {'二級警戒': 206.8, '一級警戒': 208.1}
 THIESSEN   = {'C0U720':0.345,'C0UA00':0.182,'C0UA30':0.141,

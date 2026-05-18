@@ -174,7 +174,7 @@ def make_chart(L_now, wl_time, rec, drc, history):
         fill='toself', fillcolor='rgba(220,80,60,0.15)',
         line=dict(color='rgba(0,0,0,0)'), showlegend=True, name='遞推 95% CI'))
     fig.add_trace(go.Scatter(x=rec_full_x, y=rec_full_y, mode='lines+markers',
-        name='遞推+QPF +1h~+2h', line=dict(color='tomato',width=2.5),
+        name='遞推+QPESUMS +1h~+2h', line=dict(color='tomato',width=2.5),
         marker=dict(size=8)))
 
     # 警戒水位
@@ -323,9 +323,9 @@ if fetch_ok:
                 f'{L_now:.3f} m',
                 delta=f'{L_now-WARNING["二級警戒"]:.1f}m 距二級' if L_now < WARNING['二級警戒'] else '超過二級警戒!')
     r1c2.metric('觀測雨量 (Past1hr)', f'{P_obs:.2f} mm/h')
-    r1c3.metric('QPF +1h（雷達外推預報）',
+    r1c3.metric('QPESUMS 1小時定量降雨預報',
                 f'{P_qpf:.2f} mm/h' if P_qpf is not None else '0.00 mm/h',
-                help=f'來源：CWA F-B0046-001，資料時間 {qpf_str}。')
+                help=f'來源：CWA F-B0046-001（雷達外推法），資料時間 {qpf_str}。')
 
     # 第二列：超越機率
     r2c1, r2c2 = st.columns(2)
@@ -344,10 +344,10 @@ if fetch_ok:
     col_r, col_d = st.columns(2)
 
     with col_r:
-        st.markdown('**遞推法 + QPF（+1h, +2h）**')
+        st.markdown('**遞推法 + QPESUMS（+1h, +2h）**')
         rows = []
         for r in rec:
-            qpf_tag = '(QPF)' if r['h'] == 2 and P_qpf is not None else '(觀測)'
+            qpf_tag = '(QPESUMS)' if r['h'] == 2 and P_qpf is not None else '(觀測)'
             rows.append({
                 '預報時距': f'+{r["h"]}h {qpf_tag}',
                 '預測水位 (m)': f'{r["L_hat"]:.3f}',

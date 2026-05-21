@@ -429,7 +429,7 @@ with st.spinner('抓取即時資料中...'):
                 '時間':           this_hour.strftime('%Y-%m-%d %H:%M'),
                 '水位_obs(m)':    round(L_now, 3),
                 '雨量_obs(mm/h)': round(P_obs, 2),
-                'QPF(mm/h)':     round(P_qpf, 2) if P_qpf is not None else '',
+                'QPF(mm/h)':     round(P_qpf, 2) if P_qpf is not None else 0,
                 'ARX遞推_+1h':    round(rec[0]['L_hat'], 3),
                 'ARX遞推_+2h':    round(rec[1]['L_hat'], 3),
             }

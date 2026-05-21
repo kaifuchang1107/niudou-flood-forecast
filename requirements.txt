@@ -3,3 +3,5 @@ plotly
 numpy
 scipy
 requests
+joblib
+scikit-learn

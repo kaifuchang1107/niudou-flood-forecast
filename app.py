@@ -456,24 +456,19 @@ if fetch_ok:
 
         st.markdown('#### 🔴 ARX 遞推法（+1h, +2h）')
         st.markdown('線性 ARX(2,1,0) 模型，每步預測回饋至下一步；+2h 使用氣象署 QPESUMS 雷達外推雨量。')
-        st.latex(
-            r'\hat{y}_{t+1} = \varphi_1\,y_t + \varphi_2\,y_{t-1} + \beta_1\,P_t'
-            r'\quad (\varphi_1=1.344,\ \varphi_2=-0.361,\ \beta_1=0.00547)'
-        )
+        st.latex(r'\hat{y}_{t+1} = \varphi_1\,y_t + \varphi_2\,y_{t-1} + \beta_1\,P_t')
         st.latex(r'\hat{L}_{t+h} = \hat{y}_{t+h} + L_{\text{start}}')
         st.markdown('---')
 
         st.markdown('#### 🔵 ARX 直接法（+1h ~ +6h）')
         st.markdown('各預報時距 $h$ 獨立率定線性模型，僅用當前觀測，不回饋預測誤差，不依賴未來雨量。')
         st.latex(r'\hat{L}_{t+h} = a_h\,y_t + b_h\,y_{t-1} + c_h\,P_t + L_{\text{start}}')
-        st.markdown('率定集：12 場颱風（2017～2025），OLS 估計。')
         st.markdown('---')
 
         st.markdown('#### 🟢 NARX 直接法（+1h ~ +6h）')
         st.markdown('各預報時距 $h$ 獨立訓練單隱藏層神經網路，輸入與 ARX 相同，以非線性函數取代線性係數。')
         st.latex(r'\hat{L}_{t+h} = f_h\!\bigl(y_t,\,y_{t-1},\,P_t\bigr) + L_{\text{start}}')
-        st.markdown('架構：3 → 16 (tanh) → 1 (linear)；Adam 最佳化；L2 正規化；早停（patience=30）。')
-        st.markdown('率定集：10 場颱風（訓練）+ 2 場颱風（驗證，早停用）。')
+        st.markdown('架構：3 → 16 (tanh) → 1 (linear)。')
         st.markdown('---')
 
         st.markdown('#### 防汛警戒對應（水利署定義）')

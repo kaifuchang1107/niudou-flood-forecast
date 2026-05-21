@@ -170,12 +170,24 @@ def make_chart(L_now, wl_time, rec, drc, nrx, history):
     t_future = [now_dt + timedelta(hours=h) for h in range(1,7)]
     t_rec   = [now_dt + timedelta(hours=h) for h in range(1,3)]
 
-    # 歷史水位
+    # 歷史降雨（右 y 軸，倒置）
     if history:
-        h_times = [x[0] for x in history]
+        h_times  = [x[0] for x in history]
         h_levels = [x[1] for x in history]
-        fig.add_trace(go.Scatter(x=h_times, y=h_levels, mode='lines',
-            name='觀測水位', line=dict(color='black', width=2.5)))
+        h_rain   = [x[2] if len(x) > 2 else 0 for x in history]
+        max_rain = max(h_rain) if max(h_rain) > 0 else 10
+
+        fig.add_trace(go.Bar(
+            x=h_times, y=h_rain, name='觀測雨量 (mm/h)',
+            marker_color='cornflowerblue', opacity=0.35,
+            yaxis='y2'
+        ))
+        fig.add_trace(go.Scatter(
+            x=h_times, y=h_levels, mode='lines',
+            name='觀測水位', line=dict(color='black', width=2.5)
+        ))
+    else:
+        max_rain = 10
 
     # 當前點
     fig.add_trace(go.Scatter(x=[now_dt], y=[L_now], mode='markers',
@@ -230,10 +242,20 @@ def make_chart(L_now, wl_time, rec, drc, nrx, history):
 
     fig.update_layout(
         title=dict(text='蘭陽溪牛鬥(3) 即時水位預報', font=dict(size=16)),
-        xaxis_title='時間', yaxis_title='水位 (m)',
-        legend=dict(x=0.01,y=0.99,bgcolor='rgba(255,255,255,0.8)'),
-        height=480, margin=dict(l=60,r=120,t=50,b=50),
+        xaxis_title='時間',
+        yaxis=dict(title='水位 (m)'),
+        yaxis2=dict(
+            title='雨量 (mm/h)',
+            overlaying='y', side='right',
+            range=[max(max_rain * 4, 20), 0],
+            tickfont=dict(color='cornflowerblue'),
+            title_font=dict(color='cornflowerblue'),
+            showgrid=False,
+        ),
+        legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.8)'),
+        height=500, margin=dict(l=60, r=80, t=50, b=50),
         hovermode='x unified',
+        barmode='overlay',
     )
     return fig
 
@@ -316,11 +338,11 @@ with st.spinner('抓取即時資料中...'):
         except Exception:
             st.session_state.last_fetch = data.get('wl_time','—')
 
-        # 更新歷史水位
+        # 更新歷史水位 + 雨量
         now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))
         if not st.session_state.history or st.session_state.history[-1][0] != now_dt:
-            st.session_state.history.append((now_dt, L_now))
-            st.session_state.history = st.session_state.history[-48:]
+            st.session_state.history.append((now_dt, L_now, P_obs))
+            st.session_state.history = st.session_state.history[-72:]  # 72筆 = 12小時
 
         # ── L_start 事件偵測（鎖定起始水位）────────────────────────
         if P_obs >= EVENT_P_THRESHOLD:

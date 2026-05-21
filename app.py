@@ -308,6 +308,19 @@ with st.sidebar:
 **高等水文分析 第4組**
 張凱傅、蔡愷聆、張庭瑀
 ''')
+    st.markdown('---')
+    if st.button('🔗 測試 Google Sheets 連線', use_container_width=True):
+        ws = get_gsheet()
+        if ws is None:
+            st.error('連線失敗，請檢查 secrets')
+        else:
+            try:
+                test_row = {'時間': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            '狀態': 'TEST — 連線正常'}
+                sheets_append(test_row)
+                st.success('✅ 寫入成功！去試算表確認')
+            except Exception as e:
+                st.error(f'寫入失敗：{e}')
 
 # ── 手機響應式 CSS ────────────────────────────────────────────────
 st.markdown("""

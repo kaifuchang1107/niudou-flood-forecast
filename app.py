@@ -262,10 +262,16 @@ def make_chart(L_now, wl_time, rec, drc, nrx, history):
                       annotation_text=f'{name} {level}m',
                       annotation_position='right')
 
+    # Y軸範圍：依實際水位+預測值自動縮放，不強制顯示警戒線位置
+    all_L = ([x[1] for x in history] if history else []) + [L_now] + \
+            drc_y + drc_lo + drc_hi + nrx_y + nrx_lo + nrx_hi + rec_y + rec_lo + rec_hi
+    y_lo = min(all_L) - 0.3
+    y_hi = max(all_L) + 0.5
+
     fig.update_layout(
         title=dict(text='蘭陽溪牛鬥(3) 即時水位預報', font=dict(size=16)),
         xaxis_title='時間',
-        yaxis=dict(title='水位 (m)'),
+        yaxis=dict(title='水位 (m)', range=[y_lo, y_hi]),
         yaxis2=dict(
             title='雨量 (mm/h)',
             overlaying='y', side='right',

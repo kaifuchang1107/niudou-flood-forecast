@@ -201,7 +201,8 @@ def make_chart(L_now, wl_time, rec, drc, nrx, history):
 
         fig.add_trace(go.Bar(
             x=h_times, y=h_rain, name='觀測雨量 (mm/h)',
-            marker_color='cornflowerblue', opacity=0.35,
+            marker_color='cornflowerblue', opacity=0.4,
+            width=3600000,   # 1 小時寬（毫秒）
             yaxis='y2'
         ))
         fig.add_trace(go.Scatter(

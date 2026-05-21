@@ -28,8 +28,9 @@ def sheets_append(entry: dict):
         if not rows or rows[0][0] != '時間':
             ws.insert_row(list(entry.keys()), 1)
             rows = []
-        # 防重複：最後一筆時間相同則跳過
-        if rows and len(rows) > 1 and rows[-1][0] == entry['時間']:
+        # 防重複：最近 10 筆中有相同時間戳則跳過
+        recent = [r[0] for r in rows[-10:] if r]
+        if entry['時間'] in recent:
             return
         ws.append_row(list(entry.values()), value_input_option='USER_ENTERED')
     except Exception:

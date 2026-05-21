@@ -344,12 +344,16 @@ with st.spinner('抓取即時資料中...'):
 
 if fetch_ok:
     # ── 狀態指標列 ─────────────────────────────────────────────
-    prob1_2h = drc[1]['P_1']
-    prob2_5h = drc[4]['P_2']
+    # 觸發條件：95% CI 上界碰到警戒水位（更保守）
+    ci_1_2h = rec[1]['hi']   # 遞推法 +2h CI 上界 vs 一級警戒 208.1m
+    ci_2_5h = drc[4]['hi']   # 直接法 +5h CI 上界 vs 二級警戒 206.8m
 
-    if prob1_2h >= 30:
+    alert_1 = ci_1_2h >= WARNING['一級警戒']
+    alert_2 = ci_2_5h >= WARNING['二級警戒']
+
+    if alert_1:
         status_text, status_color = '🚨 一級警戒風險', 'red'
-    elif prob2_5h >= 30:
+    elif alert_2:
         status_text, status_color = '⚠️ 二級警戒風險', 'orange'
     else:
         status_text, status_color = '✅ 安全', 'green'
@@ -370,10 +374,18 @@ if fetch_ok:
                 f'{P_qpf:.2f} mm/h' if P_qpf is not None else '0.00 mm/h',
                 help=f'來源：CWA F-B0046-001（雷達外推法），資料時間 {qpf_str}。')
 
-    # 第二列：超越機率
+    # 第二列：CI 上界 vs 警戒水位
     r2c1, r2c2 = st.columns(2)
-    r2c1.metric('+2h 超越一級警戒 (208.1m)', f'{prob1_2h:.1f}%')
-    r2c2.metric('+5h 超越二級警戒 (206.8m)', f'{prob2_5h:.1f}%')
+    gap1 = ci_1_2h - WARNING['一級警戒']
+    gap2 = ci_2_5h - WARNING['二級警戒']
+    r2c1.metric('+2h 遞推 95%CI上界（一級警戒 208.1m）',
+                f'{ci_1_2h:.3f} m',
+                delta=f'{gap1:+.3f} m',
+                delta_color='inverse')
+    r2c2.metric('+5h 直接 95%CI上界（二級警戒 206.8m）',
+                f'{ci_2_5h:.3f} m',
+                delta=f'{gap2:+.3f} m',
+                delta_color='inverse')
 
     st.markdown(f'### 防汛狀態：<span style="color:{status_color}">{status_text}</span>',
                 unsafe_allow_html=True)
@@ -473,8 +485,10 @@ if fetch_ok:
 
         st.markdown('#### 防汛警戒對應（水利署定義）')
         st.markdown("""
-- **二級警戒 206.8m**：+5h 直接法超越機率 ≥ 30% 時啟動。救災與防汛單位開始動員，完成人員、機具及防汛塊等搶險物資的整備與待命。
-- **一級警戒 208.1m**：+2h 遞推法超越機率 ≥ 30% 時啟動。情況最為緊急，水情極度接近防洪上限；政府依《災害防救法》執行勸告或強制民眾撤離。
+- **二級警戒 206.8m**：+5h ARX直接法 **95% CI 上界** 碰到 206.8m 時啟動。救災與防汛單位開始動員，完成人員、機具及防汛塊等搶險物資的整備與待命。
+- **一級警戒 208.1m**：+2h ARX遞推法 **95% CI 上界** 碰到 208.1m 時啟動。情況最為緊急，水情極度接近防洪上限；政府依《災害防救法》執行勸告或強制民眾撤離。
+
+以 CI 上界作為觸發條件，較超越機率門檻更保守，可提前發出預警。
 
 **不確定性**：95% CI 以各方法驗證集 RMSE 估計（ARX 用率定集，NARX 用驗證集）。
 """)

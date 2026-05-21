@@ -82,9 +82,9 @@ for h in H_LIST:
                    sx.transform(Xv), sy.transform(Yv.reshape(-1,1)).ravel(),
                    tag=f'+{h}h')
 
-    # 驗證集 RMSE 作為 sigma 估計
-    Yv_hat = sy.inverse_transform(mlp.predict(sx.transform(Xv)).reshape(-1,1)).ravel()
-    sigma = float(np.sqrt(np.mean((Yv - Yv_hat)**2)))
+    # 率定集 RMSE 作為 sigma 估計（與 ARX 一致）
+    Yt_hat = sy.inverse_transform(mlp.predict(sx.transform(Xt)).reshape(-1,1)).ravel()
+    sigma = float(np.sqrt(np.mean((Yt - Yt_hat)**2)))
     sigma_dict[h] = round(sigma, 4)
     print(f'  +{h}h  val RMSE = {sigma:.4f} m')
 

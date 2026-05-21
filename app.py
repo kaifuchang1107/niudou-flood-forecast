@@ -13,9 +13,8 @@ from datetime import datetime, timedelta
 from scipy import stats
 import time, os, joblib
 
-# ── Google Sheets 連線（可選，失敗不影響主功能）────────────────
-@st.cache_resource
-def get_gsheet():
+# ── Google Sheets 寫入（可選，失敗不影響主功能）─────────────────
+def sheets_append(entry: dict):
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -24,17 +23,8 @@ def get_gsheet():
             dict(st.secrets['gcp_service_account']), scopes=scopes)
         client = gspread.authorize(creds)
         ws = client.open_by_key(st.secrets['SHEET_ID']).sheet1
-        return ws
-    except Exception:
-        return None
-
-def sheets_append(entry: dict):
-    ws = get_gsheet()
-    if ws is None:
-        return
-    try:
         # 第一次寫入時建立標題列
-        if ws.row_count == 0 or ws.cell(1, 1).value != '時間':
+        if ws.acell('A1').value != '時間':
             ws.insert_row(list(entry.keys()), 1)
         ws.append_row(list(entry.values()), value_input_option='USER_ENTERED')
     except Exception:
@@ -318,8 +308,7 @@ with st.sidebar:
                 dict(st.secrets['gcp_service_account']), scopes=scopes)
             client = gspread.authorize(creds)
             ws = client.open_by_key(st.secrets['SHEET_ID']).sheet1
-            ws.append_row(['TEST', datetime.now().strftime('%Y-%m-%d %H:%M'), '連線正常'])
-            st.success('✅ 寫入成功！去試算表確認')
+            st.success(f'✅ 連線正常（試算表：{ws.spreadsheet.title}）')
         except Exception as e:
             st.error(f'錯誤：{e}')
 

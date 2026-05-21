@@ -310,17 +310,18 @@ with st.sidebar:
 ''')
     st.markdown('---')
     if st.button('🔗 測試 Google Sheets 連線', use_container_width=True):
-        ws = get_gsheet()
-        if ws is None:
-            st.error('連線失敗，請檢查 secrets')
-        else:
-            try:
-                test_row = {'時間': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                            '狀態': 'TEST — 連線正常'}
-                sheets_append(test_row)
-                st.success('✅ 寫入成功！去試算表確認')
-            except Exception as e:
-                st.error(f'寫入失敗：{e}')
+        try:
+            import gspread
+            from google.oauth2.service_account import Credentials
+            scopes = ['https://www.googleapis.com/auth/spreadsheets']
+            creds  = Credentials.from_service_account_info(
+                dict(st.secrets['gcp_service_account']), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open_by_key(st.secrets['SHEET_ID']).sheet1
+            ws.append_row(['TEST', datetime.now().strftime('%Y-%m-%d %H:%M'), '連線正常'])
+            st.success('✅ 寫入成功！去試算表確認')
+        except Exception as e:
+            st.error(f'錯誤：{e}')
 
 # ── 手機響應式 CSS ────────────────────────────────────────────────
 st.markdown("""

@@ -5,3 +5,5 @@ scipy
 requests
 joblib
 scikit-learn
+gspread
+google-auth

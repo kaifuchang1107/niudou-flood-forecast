@@ -13,6 +13,33 @@ from datetime import datetime, timedelta
 from scipy import stats
 import time, os, joblib
 
+# ── Google Sheets 連線（可選，失敗不影響主功能）────────────────
+@st.cache_resource
+def get_gsheet():
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds  = Credentials.from_service_account_info(
+            dict(st.secrets['gcp_service_account']), scopes=scopes)
+        client = gspread.authorize(creds)
+        ws = client.open_by_key(st.secrets['SHEET_ID']).sheet1
+        return ws
+    except Exception:
+        return None
+
+def sheets_append(entry: dict):
+    ws = get_gsheet()
+    if ws is None:
+        return
+    try:
+        # 第一次寫入時建立標題列
+        if ws.row_count == 0 or ws.cell(1, 1).value != '時間':
+            ws.insert_row(list(entry.keys()), 1)
+        ws.append_row(list(entry.values()), value_input_option='USER_ENTERED')
+    except Exception:
+        pass  # Sheets 失敗不影響主功能
+
 warnings.filterwarnings('ignore')
 
 # ── 頁面設定 ────────────────────────────────────────────────────
@@ -390,6 +417,7 @@ with st.spinner('抓取即時資料中...'):
             for n in nrx:
                 entry[f'NARX直接_+{n["h"]}h'] = round(n['L_hat'], 3)
             st.session_state.pred_log.append(entry)
+            sheets_append(entry)   # 同步寫入 Google Sheets
 
         fetch_ok = True
     except Exception as e:

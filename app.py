@@ -11,7 +11,7 @@ import requests
 import warnings
 from datetime import datetime, timedelta
 from scipy import stats
-import time
+import time, os, joblib
 
 warnings.filterwarnings('ignore')
 
@@ -44,9 +44,23 @@ DIRECT_COEF = {
     5:(1.418769,-0.499015,0.020420), 6:(1.379849,-0.474971,0.023350),
 }
 SIGMA_DIRECT = {1:0.0861,2:0.1516,3:0.2078,4:0.2565,5:0.2990,6:0.3383}
+SIGMA_NARX   = {1:0.1725,2:0.2715,3:0.3430,4:0.4459,5:0.5425,6:0.5758}
 Z95 = 1.96
 QPF_LON0,QPF_LAT0,QPF_RES,QPF_NX,QPF_NY = 117.975,19.975,0.0125,441,561
 REFRESH_SEC = 600  # 10 分鐘自動更新
+
+# ── NARX 模型載入（快取，只載入一次）────────────────────────────────
+@st.cache_resource
+def load_narx():
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+    m = {}
+    for h in range(1, 7):
+        m[h] = {
+            'mlp': joblib.load(os.path.join(base, f'narx_d_h{h}.joblib')),
+            'sx':  joblib.load(os.path.join(base, f'sx_d_h{h}.joblib')),
+            'sy':  joblib.load(os.path.join(base, f'sy_d_h{h}.joblib')),
+        }
+    return m
 
 # ── 資料抓取函式 ──────────────────────────────────────────────────
 @st.cache_data(ttl=REFRESH_SEC)
@@ -121,7 +135,7 @@ def run_forecast(L_now, P_obs, P_qpf, L_start=None):
         sig = SIGMA_RECUR[h]
         rec.append({'h':h,'L_hat':L_hat,'lo':L_hat-Z95*sig,'hi':L_hat+Z95*sig,'sig':sig})
 
-    # 直接法（+1h~+6h）
+    # ARX 直接法（+1h~+6h）
     drc = []
     for h in range(1, 7):
         a,b,c = DIRECT_COEF[h]
@@ -131,10 +145,26 @@ def run_forecast(L_now, P_obs, P_qpf, L_start=None):
         p1 = (1-stats.norm.cdf((WARNING['一級警戒']-L_hat)/sig))*100
         drc.append({'h':h,'L_hat':L_hat,'lo':L_hat-Z95*sig,'hi':L_hat+Z95*sig,
                     'sig':sig,'P_2':p2,'P_1':p1})
-    return rec, drc
+
+    # NARX 直接法（+1h~+6h）
+    narx_m = load_narx()
+    nrx = []
+    for h in range(1, 7):
+        m  = narx_m[h]
+        xsc = m['sx'].transform([[y_cur, y_prev, P_obs]])
+        y_hat = float(m['sy'].inverse_transform(
+            m['mlp'].predict(xsc).reshape(-1,1))[0][0])
+        L_hat = y_hat + L_start
+        sig = SIGMA_NARX[h]
+        p2 = (1-stats.norm.cdf((WARNING['二級警戒']-L_hat)/sig))*100
+        p1 = (1-stats.norm.cdf((WARNING['一級警戒']-L_hat)/sig))*100
+        nrx.append({'h':h,'L_hat':L_hat,'lo':L_hat-Z95*sig,'hi':L_hat+Z95*sig,
+                    'sig':sig,'P_2':p2,'P_1':p1})
+
+    return rec, drc, nrx
 
 # ── Plotly 歷線圖 ─────────────────────────────────────────────────
-def make_chart(L_now, wl_time, rec, drc, history):
+def make_chart(L_now, wl_time, rec, drc, nrx, history):
     fig = go.Figure()
     now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))
     t_future = [now_dt + timedelta(hours=h) for h in range(1,7)]
@@ -163,6 +193,19 @@ def make_chart(L_now, wl_time, rec, drc, history):
     fig.add_trace(go.Scatter(x=t_future, y=drc_y, mode='lines+markers',
         name='直接法 +1h~+6h', line=dict(color='steelblue',width=2,dash='dot'),
         marker=dict(size=7)))
+
+    # NARX 直接法 CI 帶（+1h~+6h）
+    nrx_lo = [n['lo'] for n in nrx]
+    nrx_hi = [n['hi'] for n in nrx]
+    nrx_y  = [n['L_hat'] for n in nrx]
+    fig.add_trace(go.Scatter(
+        x=t_future+t_future[::-1], y=nrx_hi+nrx_lo[::-1],
+        fill='toself', fillcolor='rgba(39,174,96,0.12)',
+        line=dict(color='rgba(0,0,0,0)'), showlegend=True,
+        name='NARX直接 95% CI'))
+    fig.add_trace(go.Scatter(x=t_future, y=nrx_y, mode='lines+markers',
+        name='NARX直接 +1h~+6h', line=dict(color='seagreen',width=2,dash='dashdot'),
+        marker=dict(size=7, symbol='diamond')))
 
     # 遞推 + QPF（+1h, +2h）
     rec_lo = [r['lo'] for r in rec]
@@ -237,7 +280,7 @@ st.markdown("""
 # ── 主介面 ────────────────────────────────────────────────────────
 st.title('🌊 蘭陽溪牛鬥(3) 即時洪水預報系統')
 st.caption('高等水文分析 第4組：張凱傅、蔡愷聆、張庭瑀')
-st.caption('模型：水位偏差 ARX(2,1,0) | 資料：水利署 + 氣象署 CWA | 每10分鐘自動更新')
+st.caption('模型：ARX(2,1,0) 遞推/直接法 + NARX直接法 | 資料：水利署 + 氣象署 CWA | 每10分鐘自動更新')
 
 # 初始化 session state
 if 'history' not in st.session_state:
@@ -293,7 +336,7 @@ with st.spinner('抓取即時資料中...'):
 
         L_start_use = st.session_state.L_start_event if st.session_state.event_active else L_now
 
-        rec, drc = run_forecast(L_now, P_obs, P_qpf, L_start=L_start_use)
+        rec, drc, nrx = run_forecast(L_now, P_obs, P_qpf, L_start=L_start_use)
         fetch_ok = True
     except Exception as e:
         st.error(f'資料抓取失敗：{e}')
@@ -336,15 +379,15 @@ if fetch_ok:
                 unsafe_allow_html=True)
 
     # ── 主圖 ───────────────────────────────────────────────────
-    fig = make_chart(L_now, wl_time, rec, drc, st.session_state.history)
+    fig = make_chart(L_now, wl_time, rec, drc, nrx, st.session_state.history)
     st.plotly_chart(fig, use_container_width=True)
 
     # ── 預測數值表 ─────────────────────────────────────────────
     st.subheader('預測數值')
-    col_r, col_d = st.columns(2)
+    col_r, col_d, col_n = st.columns(3)
 
     with col_r:
-        st.markdown('**遞推法 + QPESUMS（+1h, +2h）**')
+        st.markdown('**🔴 遞推法 + QPESUMS（+1h, +2h）**')
         rows = []
         for r in rec:
             qpf_tag = '(QPESUMS)' if r['h'] == 2 and P_qpf is not None else '(觀測)'
@@ -356,7 +399,7 @@ if fetch_ok:
         st.dataframe(rows, hide_index=True, use_container_width=True)
 
     with col_d:
-        st.markdown('**直接法（+1h ~ +6h）**')
+        st.markdown('**🔵 ARX直接法（+1h ~ +6h）**')
         rows2 = []
         for d in drc:
             warn = ''
@@ -371,6 +414,23 @@ if fetch_ok:
                 '警示': warn,
             })
         st.dataframe(rows2, hide_index=True, use_container_width=True)
+
+    with col_n:
+        st.markdown('**🟢 NARX直接法（+1h ~ +6h）**')
+        rows3 = []
+        for n in nrx:
+            warn = ''
+            if n['P_1'] >= 30: warn = '🚨'
+            elif n['P_2'] >= 30: warn = '⚠️'
+            rows3.append({
+                '預報時距': f'+{n["h"]}h',
+                '預測水位 (m)': f'{n["L_hat"]:.3f}',
+                '95% CI': f'[{n["lo"]:.3f}, {n["hi"]:.3f}]',
+                'P(>206.8m)': f'{n["P_2"]:.1f}%',
+                'P(>208.1m)': f'{n["P_1"]:.1f}%',
+                '警示': warn,
+            })
+        st.dataframe(rows3, hide_index=True, use_container_width=True)
 
     # ── 雨量站詳情 ─────────────────────────────────────────────
     with st.expander('Thiessen 六站雨量詳情'):
@@ -394,9 +454,10 @@ if fetch_ok:
         st.latex(r'y_{t+1} = \varphi_1\,y_t + \varphi_2\,y_{t-1} + \beta_1\,P_t')
         st.markdown('---')
         st.markdown("""
-**兩條預測線**：
-- 🔴 **遞推法**：+1h 用觀測雨量，+2h 用氣象署QPESUMS1小時定量降雨預報格點資料
-- 🔵 **直接法**：+1h～+6h 僅用當前觀測，不依賴降雨預報，誤差較遞推法大
+**三條預測線**：
+- 🔴 **ARX遞推法**：+1h 用觀測雨量，+2h 用氣象署 QPESUMS 1小時定量降雨預報格點資料
+- 🔵 **ARX直接法**：+1h～+6h 僅用當前觀測，線性模型，不依賴降雨預報
+- 🟢 **NARX直接法**：+1h～+6h 僅用當前觀測，單隱藏層神經網路（16 neurons, tanh），非線性映射
 """)
         st.latex(r'L_{t+h} = a_h\,y_t + b_h\,y_{t-1} + c_h\,P_t + L_{\text{start}}')
         st.markdown("""

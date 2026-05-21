@@ -270,19 +270,24 @@ def make_chart(L_now, wl_time, rec, drc, nrx, history):
     y_hi = max(all_L) + 0.5
 
     fig.update_layout(
-        title=dict(text='蘭陽溪牛鬥(3) 即時水位預報', font=dict(size=16)),
+        title=dict(text='蘭陽溪牛鬥(3) 即時水位預報', font=dict(size=14)),
         xaxis_title='時間',
         yaxis=dict(title='水位 (m)', range=[y_lo, y_hi]),
         yaxis2=dict(
-            title='雨量 (mm/h)',
             overlaying='y', side='right',
             range=[max(max_rain * 4, 20), 0],
-            tickfont=dict(color='cornflowerblue'),
-            title_font=dict(color='cornflowerblue'),
-            showgrid=False,
+            showticklabels=False,   # 隱藏右軸數字（避免顯示混亂）
+            showgrid=False, title='',
         ),
-        legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.8)'),
-        height=500, margin=dict(l=60, r=80, t=50, b=50),
+        legend=dict(
+            orientation='h',        # 水平圖例
+            yanchor='top', y=-0.18,
+            xanchor='left', x=0,
+            bgcolor='rgba(255,255,255,0.8)',
+            font=dict(size=10),
+        ),
+        height=420,
+        margin=dict(l=55, r=20, t=40, b=120),
         hovermode='x unified',
         barmode='overlay',
     )
@@ -501,7 +506,8 @@ if fetch_ok:
         hist_label = '歷史資料：本次連線起始，累積中…'
     st.caption(hist_label)
     fig = make_chart(L_now, wl_time, rec, drc, nrx, display_history)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True,
+                    config={'displayModeBar': False})
 
     # ── 預測數值表 ─────────────────────────────────────────────
     st.subheader('預測數值')

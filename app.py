@@ -306,11 +306,13 @@ st.caption('模型：ARX(2,1,0) 遞推/直接法 + NARX直接法 | 資料：水�
 
 # 初始化 session state
 if 'history' not in st.session_state:
-    st.session_state.history = []
+    st.session_state.history = []           # 滾動12小時 (time, L, P)
+if 'event_history' not in st.session_state:
+    st.session_state.event_history = []    # 完整事件歷線 (time, L, P)
 if 'last_fetch' not in st.session_state:
     st.session_state.last_fetch = None
 if 'L_start_event' not in st.session_state:
-    st.session_state.L_start_event = None   # 事件起始水位（鎖定後不變）
+    st.session_state.L_start_event = None
 if 'event_active' not in st.session_state:
     st.session_state.event_active = False
 
@@ -340,19 +342,28 @@ with st.spinner('抓取即時資料中...'):
 
         # 更新歷史水位 + 雨量
         now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))
-        if not st.session_state.history or st.session_state.history[-1][0] != now_dt:
+        is_new = (not st.session_state.history or
+                  st.session_state.history[-1][0] != now_dt)
+
+        if is_new:
             st.session_state.history.append((now_dt, L_now, P_obs))
-            st.session_state.history = st.session_state.history[-72:]  # 72筆 = 12小時
+            st.session_state.history = st.session_state.history[-72:]  # 滾動12小時
 
         # ── L_start 事件偵測（鎖定起始水位）────────────────────────
         if P_obs >= EVENT_P_THRESHOLD:
             if not st.session_state.event_active:
-                # 事件開始：鎖定當前水位為 L_start
+                # 事件開始：鎖定 L_start，清空事件歷線
                 st.session_state.L_start_event = L_now
                 st.session_state.event_active  = True
+                st.session_state.event_history = []
+            # 事件中：持續累積（不限筆數）
+            if is_new:
+                st.session_state.event_history.append((now_dt, L_now, P_obs))
         else:
             if st.session_state.event_active:
-                # 降雨停止：重置（下次有雨再重新鎖定）
+                # 降雨停止：保留事件歷線供下載，重置偵測狀態
+                if is_new:
+                    st.session_state.event_history.append((now_dt, L_now, P_obs))
                 st.session_state.event_active  = False
                 st.session_state.L_start_event = None
 
@@ -413,7 +424,13 @@ if fetch_ok:
                 unsafe_allow_html=True)
 
     # ── 主圖 ───────────────────────────────────────────────────
-    fig = make_chart(L_now, wl_time, rec, drc, nrx, st.session_state.history)
+    # 事件中顯示完整事件歷線，否則顯示滾動12小時
+    display_history = (st.session_state.event_history
+                       if st.session_state.event_active and st.session_state.event_history
+                       else st.session_state.history)
+    event_label = '（事件歷線）' if st.session_state.event_active else '（近12小時）'
+    st.caption(f'圖表資料範圍：{event_label}')
+    fig = make_chart(L_now, wl_time, rec, drc, nrx, display_history)
     st.plotly_chart(fig, use_container_width=True)
 
     # ── 預測數值表 ─────────────────────────────────────────────
@@ -465,6 +482,25 @@ if fetch_ok:
                 '警示': warn,
             })
         st.dataframe(rows3, hide_index=True, use_container_width=True)
+
+    # ── 事件歷線下載 ────────────────────────────────────────────
+    dl_data = st.session_state.event_history or st.session_state.history
+    if dl_data:
+        import io, csv as _csv
+        buf = io.StringIO()
+        w = _csv.writer(buf)
+        w.writerow(['time', 'L_m', 'P_mm_h'])
+        for row in dl_data:
+            w.writerow([row[0].strftime('%Y-%m-%d %H:%M'),
+                        f'{row[1]:.3f}',
+                        f'{row[2]:.2f}'])
+        label = '事件歷線' if st.session_state.event_history else '近期歷線'
+        st.download_button(
+            label=f'⬇️ 下載{label} CSV',
+            data=buf.getvalue().encode('utf-8-sig'),
+            file_name=f'niudou_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
+            mime='text/csv',
+        )
 
     # ── 雨量站詳情 ─────────────────────────────────────────────
     with st.expander('Thiessen 六站雨量詳情'):

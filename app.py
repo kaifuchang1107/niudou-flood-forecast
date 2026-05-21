@@ -541,44 +541,9 @@ if fetch_ok:
             })
         st.dataframe(rows3, hide_index=True, use_container_width=True)
 
-    # ── 下載區 ──────────────────────────────────────────────────
-    import io, csv as _csv
-    dl_col1, dl_col2 = st.columns(2)
-
-    # 1. 預測日誌（完整，含三種模型輸出）
-    with dl_col1:
-        if st.session_state.pred_log:
-            buf1 = io.StringIO()
-            cols = list(st.session_state.pred_log[0].keys())
-            w1 = _csv.DictWriter(buf1, fieldnames=cols)
-            w1.writeheader(); w1.writerows(st.session_state.pred_log)
-            st.download_button(
-                label=f'⬇️ 預測日誌 CSV（{len(st.session_state.pred_log)} 筆）',
-                data=buf1.getvalue().encode('utf-8-sig'),
-                file_name=f'forecast_log_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
-                mime='text/csv',
-                help='含水位觀測、雨量、QPF、ARX遞推/直接、NARX直接預測值',
-            )
-        else:
-            st.caption('預測日誌累積中…')
-
-    # 2. 事件/近期歷線（水位+雨量）
-    with dl_col2:
-        dl_data = st.session_state.event_history or st.session_state.history
-        if dl_data:
-            buf2 = io.StringIO()
-            w2 = _csv.writer(buf2)
-            w2.writerow(['time', 'L_m', 'P_mm_h'])
-            for row in dl_data:
-                w2.writerow([row[0].strftime('%Y-%m-%d %H:%M'),
-                             f'{row[1]:.3f}', f'{row[2]:.2f}'])
-            label = '事件歷線' if st.session_state.event_history else '近期歷線'
-            st.download_button(
-                label=f'⬇️ {label} CSV（{len(dl_data)} 筆）',
-                data=buf2.getvalue().encode('utf-8-sig'),
-                file_name=f'niudou_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
-                mime='text/csv',
-            )
+    # ── 資料紀錄連結 ────────────────────────────────────────────
+    sheet_url = f'https://docs.google.com/spreadsheets/d/{st.secrets["SHEET_ID"]}'
+    st.markdown(f'📊 [預測日誌 Google Sheets]({sheet_url})（每整點自動更新）')
 
     # ── 雨量站詳情 ─────────────────────────────────────────────
     with st.expander('Thiessen 六站雨量詳情'):

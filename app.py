@@ -449,23 +449,39 @@ if fetch_ok:
 
     # ── 說明 ───────────────────────────────────────────────────
     with st.expander('模型說明'):
-        st.markdown('**模型**：水位偏差 ARX(2,1,0)，OLS 率定（12 場颱風，2017～2025）')
+        st.markdown('#### 水位偏差定義')
+        st.markdown('各預測方法皆以水位偏差 $y_t$ 為操作變數，事件起始水位 $L_{\\text{start}}$ 在降雨超過 5 mm/h 時鎖定：')
         st.latex(r'y_t = L_t - L_{\text{start}}')
-        st.latex(r'y_{t+1} = \varphi_1\,y_t + \varphi_2\,y_{t-1} + \beta_1\,P_t')
         st.markdown('---')
-        st.markdown("""
-**三條預測線**：
-- 🔴 **ARX遞推法**：+1h 用觀測雨量，+2h 用氣象署 QPESUMS 1小時定量降雨預報格點資料
-- 🔵 **ARX直接法**：+1h～+6h 僅用當前觀測，線性模型，不依賴降雨預報
-- 🟢 **NARX直接法**：+1h～+6h 僅用當前觀測，單隱藏層神經網路（16 neurons, tanh），非線性映射
-""")
-        st.latex(r'L_{t+h} = a_h\,y_t + b_h\,y_{t-1} + c_h\,P_t + L_{\text{start}}')
-        st.markdown("""
-**防汛警戒對應**（水利署定義）：
-- 二級警戒 206.8m → 對應 **+5h** 直接法超越機率 ≥ 30% 時啟動；救災與防汛單位開始動員，完成人員、機具及防汛塊等搶險物資的整備與待命。
-- 一級警戒 208.1m → 對應 **+2h** 遞推法超越機率 ≥ 30% 時啟動；情況最為緊急，水情極度接近防洪上限；政府依《災害防救法》執行勸告或強制民眾撤離，並動員救災能量安置受災民眾。
 
-**不確定性**：95% CI 以率定集 RMSE 估計。
+        st.markdown('#### 🔴 ARX 遞推法（+1h, +2h）')
+        st.markdown('線性 ARX(2,1,0) 模型，每步預測回饋至下一步；+2h 使用氣象署 QPESUMS 雷達外推雨量。')
+        st.latex(
+            r'\hat{y}_{t+1} = \varphi_1\,y_t + \varphi_2\,y_{t-1} + \beta_1\,P_t'
+            r'\quad (\varphi_1=1.344,\ \varphi_2=-0.361,\ \beta_1=0.00547)'
+        )
+        st.latex(r'\hat{L}_{t+h} = \hat{y}_{t+h} + L_{\text{start}}')
+        st.markdown('---')
+
+        st.markdown('#### 🔵 ARX 直接法（+1h ~ +6h）')
+        st.markdown('各預報時距 $h$ 獨立率定線性模型，僅用當前觀測，不回饋預測誤差，不依賴未來雨量。')
+        st.latex(r'\hat{L}_{t+h} = a_h\,y_t + b_h\,y_{t-1} + c_h\,P_t + L_{\text{start}}')
+        st.markdown('率定集：12 場颱風（2017～2025），OLS 估計。')
+        st.markdown('---')
+
+        st.markdown('#### 🟢 NARX 直接法（+1h ~ +6h）')
+        st.markdown('各預報時距 $h$ 獨立訓練單隱藏層神經網路，輸入與 ARX 相同，以非線性函數取代線性係數。')
+        st.latex(r'\hat{L}_{t+h} = f_h\!\bigl(y_t,\,y_{t-1},\,P_t\bigr) + L_{\text{start}}')
+        st.markdown('架構：3 → 16 (tanh) → 1 (linear)；Adam 最佳化；L2 正規化；早停（patience=30）。')
+        st.markdown('率定集：10 場颱風（訓練）+ 2 場颱風（驗證，早停用）。')
+        st.markdown('---')
+
+        st.markdown('#### 防汛警戒對應（水利署定義）')
+        st.markdown("""
+- **二級警戒 206.8m**：+5h 直接法超越機率 ≥ 30% 時啟動。救災與防汛單位開始動員，完成人員、機具及防汛塊等搶險物資的整備與待命。
+- **一級警戒 208.1m**：+2h 遞推法超越機率 ≥ 30% 時啟動。情況最為緊急，水情極度接近防洪上限；政府依《災害防救法》執行勸告或強制民眾撤離。
+
+**不確定性**：95% CI 以各方法驗證集 RMSE 估計（ARX 用率定集，NARX 用驗證集）。
 """)
 
 # ── 自動重新整理 ────────────────────────────────────────────────

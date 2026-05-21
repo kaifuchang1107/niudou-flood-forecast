@@ -342,30 +342,32 @@ with st.spinner('抓取即時資料中...'):
         except Exception:
             st.session_state.last_fetch = data.get('wl_time','—')
 
-        # 更新歷史水位 + 雨量
-        now_dt = datetime.fromisoformat(wl_time.replace('+08:00',''))
-        is_new = (not st.session_state.history or
-                  st.session_state.history[-1][0] != now_dt)
+        # 時間解析
+        now_dt   = datetime.fromisoformat(wl_time.replace('+08:00',''))
+        this_hour = now_dt.replace(minute=0, second=0, microsecond=0)
 
-        if is_new:
-            st.session_state.history.append((now_dt, L_now, P_obs))
-            st.session_state.history = st.session_state.history[-72:]  # 滾動12小時
+        # 整點判斷：history 最後一筆的整點 ≠ 現在的整點
+        last_hour = (st.session_state.history[-1][0].replace(minute=0, second=0, microsecond=0)
+                     if st.session_state.history else None)
+        is_new_hour = (last_hour is None or last_hour != this_hour)
+
+        # ── 整點寫入歷史（滾動 24 筆 = 24 小時）──────────────────────
+        if is_new_hour:
+            st.session_state.history.append((this_hour, L_now, P_obs))
+            st.session_state.history = st.session_state.history[-24:]
 
         # ── L_start 事件偵測（鎖定起始水位）────────────────────────
         if P_obs >= EVENT_P_THRESHOLD:
             if not st.session_state.event_active:
-                # 事件開始：鎖定 L_start，清空事件歷線
                 st.session_state.L_start_event = L_now
                 st.session_state.event_active  = True
                 st.session_state.event_history = []
-            # 事件中：持續累積（不限筆數）
-            if is_new:
-                st.session_state.event_history.append((now_dt, L_now, P_obs))
+            if is_new_hour:
+                st.session_state.event_history.append((this_hour, L_now, P_obs))
         else:
             if st.session_state.event_active:
-                # 降雨停止：保留事件歷線供下載，重置偵測狀態
-                if is_new:
-                    st.session_state.event_history.append((now_dt, L_now, P_obs))
+                if is_new_hour:
+                    st.session_state.event_history.append((this_hour, L_now, P_obs))
                 st.session_state.event_active  = False
                 st.session_state.L_start_event = None
 
@@ -373,15 +375,15 @@ with st.spinner('抓取即時資料中...'):
 
         rec, drc, nrx = run_forecast(L_now, P_obs, P_qpf, L_start=L_start_use)
 
-        # ── 預測日誌（每次刷新記一筆）───────────────────────────────
-        if is_new:
+        # ── 預測日誌（整點記一筆）────────────────────────────────────
+        if is_new_hour:
             entry = {
-                '時間':        now_dt.strftime('%Y-%m-%d %H:%M'),
-                '水位_obs(m)': round(L_now, 3),
+                '時間':           this_hour.strftime('%Y-%m-%d %H:%M'),
+                '水位_obs(m)':    round(L_now, 3),
                 '雨量_obs(mm/h)': round(P_obs, 2),
-                'QPF(mm/h)':  round(P_qpf, 2) if P_qpf is not None else '',
-                'ARX遞推_+1h': round(rec[0]['L_hat'], 3),
-                'ARX遞推_+2h': round(rec[1]['L_hat'], 3),
+                'QPF(mm/h)':     round(P_qpf, 2) if P_qpf is not None else '',
+                'ARX遞推_+1h':    round(rec[0]['L_hat'], 3),
+                'ARX遞推_+2h':    round(rec[1]['L_hat'], 3),
             }
             for d in drc:
                 entry[f'ARX直接_+{d["h"]}h'] = round(d['L_hat'], 3)

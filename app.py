@@ -23,12 +23,17 @@ def sheets_append(entry: dict):
             dict(st.secrets['gcp_service_account']), scopes=scopes)
         client = gspread.authorize(creds)
         ws = client.open_by_key(st.secrets['SHEET_ID']).sheet1
-        # 第一次寫入時建立標題列
-        if ws.acell('A1').value != '時間':
+        rows = ws.get_all_values()
+        # 標題列不存在時建立
+        if not rows or rows[0][0] != '時間':
             ws.insert_row(list(entry.keys()), 1)
+            rows = []
+        # 防重複：最後一筆時間相同則跳過
+        if rows and len(rows) > 1 and rows[-1][0] == entry['時間']:
+            return
         ws.append_row(list(entry.values()), value_input_option='USER_ENTERED')
     except Exception:
-        pass  # Sheets 失敗不影響主功能
+        pass
 
 warnings.filterwarnings('ignore')
 

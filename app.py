@@ -309,6 +309,8 @@ if 'history' not in st.session_state:
     st.session_state.history = []           # 滾動12小時 (time, L, P)
 if 'event_history' not in st.session_state:
     st.session_state.event_history = []    # 完整事件歷線 (time, L, P)
+if 'pred_log' not in st.session_state:
+    st.session_state.pred_log = []          # 完整預測日誌（每次刷新一筆）
 if 'last_fetch' not in st.session_state:
     st.session_state.last_fetch = None
 if 'L_start_event' not in st.session_state:
@@ -370,6 +372,23 @@ with st.spinner('抓取即時資料中...'):
         L_start_use = st.session_state.L_start_event if st.session_state.event_active else L_now
 
         rec, drc, nrx = run_forecast(L_now, P_obs, P_qpf, L_start=L_start_use)
+
+        # ── 預測日誌（每次刷新記一筆）───────────────────────────────
+        if is_new:
+            entry = {
+                '時間':        now_dt.strftime('%Y-%m-%d %H:%M'),
+                '水位_obs(m)': round(L_now, 3),
+                '雨量_obs(mm/h)': round(P_obs, 2),
+                'QPF(mm/h)':  round(P_qpf, 2) if P_qpf is not None else '',
+                'ARX遞推_+1h': round(rec[0]['L_hat'], 3),
+                'ARX遞推_+2h': round(rec[1]['L_hat'], 3),
+            }
+            for d in drc:
+                entry[f'ARX直接_+{d["h"]}h'] = round(d['L_hat'], 3)
+            for n in nrx:
+                entry[f'NARX直接_+{n["h"]}h'] = round(n['L_hat'], 3)
+            st.session_state.pred_log.append(entry)
+
         fetch_ok = True
     except Exception as e:
         st.error(f'資料抓取失敗：{e}')
@@ -428,8 +447,14 @@ if fetch_ok:
     display_history = (st.session_state.event_history
                        if st.session_state.event_active and st.session_state.event_history
                        else st.session_state.history)
-    event_label = '（事件歷線）' if st.session_state.event_active else '（近12小時）'
-    st.caption(f'圖表資料範圍：{event_label}')
+    n_hist = len(display_history)
+    if n_hist > 1:
+        t0 = display_history[0][0].strftime('%m/%d %H:%M')
+        t1 = display_history[-1][0].strftime('%m/%d %H:%M')
+        hist_label = f'歷史資料：{t0} ～ {t1}（{n_hist} 筆）'
+    else:
+        hist_label = '歷史資料：本次連線起始，累積中…'
+    st.caption(hist_label)
     fig = make_chart(L_now, wl_time, rec, drc, nrx, display_history)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -483,24 +508,44 @@ if fetch_ok:
             })
         st.dataframe(rows3, hide_index=True, use_container_width=True)
 
-    # ── 事件歷線下載 ────────────────────────────────────────────
-    dl_data = st.session_state.event_history or st.session_state.history
-    if dl_data:
-        import io, csv as _csv
-        buf = io.StringIO()
-        w = _csv.writer(buf)
-        w.writerow(['time', 'L_m', 'P_mm_h'])
-        for row in dl_data:
-            w.writerow([row[0].strftime('%Y-%m-%d %H:%M'),
-                        f'{row[1]:.3f}',
-                        f'{row[2]:.2f}'])
-        label = '事件歷線' if st.session_state.event_history else '近期歷線'
-        st.download_button(
-            label=f'⬇️ 下載{label} CSV',
-            data=buf.getvalue().encode('utf-8-sig'),
-            file_name=f'niudou_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
-            mime='text/csv',
-        )
+    # ── 下載區 ──────────────────────────────────────────────────
+    import io, csv as _csv
+    dl_col1, dl_col2 = st.columns(2)
+
+    # 1. 預測日誌（完整，含三種模型輸出）
+    with dl_col1:
+        if st.session_state.pred_log:
+            buf1 = io.StringIO()
+            cols = list(st.session_state.pred_log[0].keys())
+            w1 = _csv.DictWriter(buf1, fieldnames=cols)
+            w1.writeheader(); w1.writerows(st.session_state.pred_log)
+            st.download_button(
+                label=f'⬇️ 預測日誌 CSV（{len(st.session_state.pred_log)} 筆）',
+                data=buf1.getvalue().encode('utf-8-sig'),
+                file_name=f'forecast_log_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
+                mime='text/csv',
+                help='含水位觀測、雨量、QPF、ARX遞推/直接、NARX直接預測值',
+            )
+        else:
+            st.caption('預測日誌累積中…')
+
+    # 2. 事件/近期歷線（水位+雨量）
+    with dl_col2:
+        dl_data = st.session_state.event_history or st.session_state.history
+        if dl_data:
+            buf2 = io.StringIO()
+            w2 = _csv.writer(buf2)
+            w2.writerow(['time', 'L_m', 'P_mm_h'])
+            for row in dl_data:
+                w2.writerow([row[0].strftime('%Y-%m-%d %H:%M'),
+                             f'{row[1]:.3f}', f'{row[2]:.2f}'])
+            label = '事件歷線' if st.session_state.event_history else '近期歷線'
+            st.download_button(
+                label=f'⬇️ {label} CSV（{len(dl_data)} 筆）',
+                data=buf2.getvalue().encode('utf-8-sig'),
+                file_name=f'niudou_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
+                mime='text/csv',
+            )
 
     # ── 雨量站詳情 ─────────────────────────────────────────────
     with st.expander('Thiessen 六站雨量詳情'):
